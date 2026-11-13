@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>listaCidadesAPartirDeEstados</title>
+  <style>
+    body {
+      font-family: Georgia, "Times New Roman", serif;
+      max-width: 700px;
+      margin: 40px auto;
+      padding: 0 16px;
+    }
+
+    h1 {
+      font-size: 26px;
+    }
+
+    label {
+      display: block;
+      margin: 16px 0 8px;
+      font-size: 18px;
+    }
+
+    select {
+      width: 100%;
+      padding: 8px;
+      font-size: 14px;
+      font-family: Arial, sans-serif;
+    }
+
+    #resultado {
+      margin-top: 24px;
+      font-size: 18px;
+    }
+
+    .erro {
+      color: #c00;
+    }
+  </style>
+</head>
+<body>
+  <h1>listaCidadesAPartirDeEstados</h1>
+
+  <label for="estado">Estado:</label>
+  <select id="estado">
+    <option value="">Carregando estados...</option>
+  </select>
+
+  <label for="cidade">Cidade:</label>
+  <select id="cidade" disabled>
+    <option value="">Selecione um estado primeiro</option>
+  </select>
+
+  <p id="resultado"></p>
+
+  <script>
+    const selectEstado = document.getElementById("estado");
+    const selectCidade = document.getElementById("cidade");
+    const resultado = document.getElementById("resultado");
+
+    // Limpa o select e coloca uma opção padrão + a lista de itens
+    function preencherSelect(select, textoPadrao, itens) {
+      select.innerHTML = "";
+
+      const opcaoPadrao = document.createElement("option");
+      opcaoPadrao.value = "";
+      opcaoPadrao.textContent = textoPadrao;
+      select.appendChild(opcaoPadrao);
+
+      for (const item of itens) {
+        const option = document.createElement("option");
+        option.value = item.valor;
+        option.textContent = item.texto;
+        select.appendChild(option);
+      }
+    }
+
+    function mostrarErro(mensagem) {
+      resultado.className = "erro";
+      resultado.textContent = mensagem;
+    }
+
+    function limparResultado() {
+      resultado.className = "";
+      resultado.textContent = "";
+    }
+
+    // 1) Busca todos os estados do Brasil
+    async function carregarEstados() {
+      try {
+        const resposta = await fetch("https://servicodados.ibge.gov.br/api/v1/localidades/estados");
+
+        if (!resposta.ok) {
+          throw new Error("Falha ao buscar estados");
+        }
+
+        const estados = await resposta.json();
+
+        // A API não devolve em ordem alfabética, então ordenamos pelo nome
+        estados.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
+        preencherSelect(
+          selectEstado,
+          "Selecione um estado",
+          estados.map((estado) => ({ valor: estado.sigla, texto: estado.nome }))
+        );
+      } catch (erro) {
+        preencherSelect(selectEstado, "Erro ao carregar estados", []);
+        mostrarErro("Não foi possível carregar os estados.");
+      }
+    }
+
+    // 2) Busca as cidades do estado escolhido
+    async function carregarCidades(uf) {
+      selectCidade.disabled = true;
+      preencherSelect(selectCidade, "Carregando cidades...", []);
+
+      try {
+        const resposta = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${uf}/municipios`);
+
+        if (!resposta.ok) {
+          throw new Error("Falha ao buscar cidades");
+        }
+
+        const cidades = await resposta.json();
+
+        // Se o usuário trocou de estado enquanto carregava, ignora esta resposta
+        if (selectEstado.value !== uf) {
+          return;
+        }
+
+        cidades.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
+        preencherSelect(
+          selectCidade,
+          "Selecione uma cidade",
+          cidades.map((cidade) => ({ valor: cidade.nome, texto: cidade.nome }))
+        );
+        selectCidade.disabled = false;
+      } catch (erro) {
+        preencherSelect(selectCidade, "Erro ao carregar cidades", []);
+        mostrarErro("Não foi possível carregar as cidades.");
+      }
+    }
+
+    selectEstado.addEventListener("change", () => {
+      limparResultado();
+
+      const uf = selectEstado.value;
+
+      if (!uf) {
+        selectCidade.disabled = true;
+        preencherSelect(selectCidade, "Selecione um estado primeiro", []);
+        return;
+      }
+
+      carregarCidades(uf);
+    });
+
+    // 3) Mostra a cidade e o estado escolhidos
+    selectCidade.addEventListener("change", () => {
+      if (!selectCidade.value) {
+        limparResultado();
+        return;
+      }
+
+      const nomeEstado = selectEstado.options[selectEstado.selectedIndex].textContent;
+
+      resultado.className = "";
+      resultado.textContent = `Você selecionou: ${selectCidade.value} - ${nomeEstado}`;
+    });
+
+    carregarEstados();
+  </script>
+</body>
+</html>
