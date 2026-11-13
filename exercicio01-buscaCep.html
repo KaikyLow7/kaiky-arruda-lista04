@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>buscaCEP</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 700px;
+      margin: 40px auto;
+      padding: 0 16px;
+    }
+
+    h1 {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 24px;
+    }
+
+    input,
+    button {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    #resultado p {
+      font-family: Georgia, "Times New Roman", serif;
+      margin: 10px 0;
+    }
+
+    .erro {
+      color: #c00;
+    }
+  </style>
+</head>
+<body>
+  <h1>buscaCEP</h1>
+
+  <form id="form-cep">
+    <input
+      type="text"
+      id="cep"
+      placeholder="Digite o CEP (ex: 01001000)"
+      maxlength="9"
+      autocomplete="postal-code"
+    >
+    <button type="submit">Buscar Endereço</button>
+  </form>
+
+  <div id="resultado"></div>
+
+  <script>
+    const form = document.getElementById("form-cep");
+    const inputCep = document.getElementById("cep");
+    const resultado = document.getElementById("resultado");
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      // Remove tudo que não for número (aceita "79104-830" ou "79104830")
+      const cep = inputCep.value.replace(/\D/g, "");
+
+      // CEP válido tem exatamente 8 dígitos
+      if (cep.length !== 8) {
+        mostrarErro();
+        return;
+      }
+
+      resultado.textContent = "Buscando...";
+
+      try {
+        const resposta = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+
+        if (!resposta.ok) {
+          throw new Error("Falha na requisição");
+        }
+
+        const dados = await resposta.json();
+
+        // A ViaCEP responde { "erro": true } quando o CEP não existe
+        if (dados.erro) {
+          throw new Error("CEP não encontrado");
+        }
+
+        mostrarEndereco(dados);
+      } catch (erro) {
+        mostrarErro();
+      }
+    });
+
+    function mostrarEndereco(dados) {
+      const campos = [
+        ["Logradouro", dados.logradouro],
+        ["Bairro", dados.bairro],
+        ["Cidade", dados.localidade],
+        ["Estado", dados.uf],
+      ];
+
+      resultado.innerHTML = "";
+
+      for (const [rotulo, valor] of campos) {
+        const p = document.createElement("p");
+        const strong = document.createElement("strong");
+        strong.textContent = `${rotulo}: `;
+        p.append(strong, valor || "-");
+        resultado.appendChild(p);
+      }
+    }
+
+    function mostrarErro() {
+      resultado.innerHTML = "";
+      const p = document.createElement("p");
+      p.className = "erro";
+      p.textContent = "Erro ao buscar endereço.";
+      resultado.appendChild(p);
+    }
+  </script>
+</body>
+</html>
