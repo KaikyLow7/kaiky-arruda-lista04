@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>detalhaPostagem</title>
+  <style>
+    body {
+      font-family: Georgia, "Times New Roman", serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 16px;
+    }
+
+    h1 {
+      font-size: 26px;
+    }
+
+    label {
+      display: block;
+      margin: 16px 0 8px;
+      font-size: 16px;
+    }
+
+    select {
+      width: 100%;
+      padding: 8px;
+      font-size: 14px;
+      font-family: Arial, sans-serif;
+      margin-bottom: 12px;
+    }
+
+    /* Cada título de postagem é um botão com cara de "caixinha" cinza */
+    .titulo {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: #eee;
+      border: 1px solid #ccc;
+      margin: 3px 0;
+      padding: 2px 4px;
+      font-family: inherit;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .titulo:hover,
+    .titulo.selecionado {
+      background: #ddd;
+    }
+
+    .detalhes {
+      margin: 12px 0 20px;
+    }
+
+    .detalhes h3 {
+      margin-bottom: 8px;
+    }
+
+    .detalhes ul {
+      font-size: 13px;
+    }
+
+    .detalhes li {
+      margin-bottom: 4px;
+    }
+
+    .erro {
+      color: #c00;
+    }
+  </style>
+</head>
+<body>
+  <h1>detalhaPostagem</h1>
+
+  <label for="usuario">Usuário:</label>
+  <select id="usuario">
+    <option value="">Carregando usuários...</option>
+  </select>
+
+  <div id="postagens"></div>
+
+  <script>
+    const API = "https://jsonplaceholder.typicode.com";
+
+    const selectUsuario = document.getElementById("usuario");
+    const listaPostagens = document.getElementById("postagens");
+
+    // Conta as requisições de detalhes, para ignorar respostas antigas
+    let requisicaoAtual = 0;
+
+    function mostrarMensagem(elemento, texto, ehErro = false) {
+      elemento.innerHTML = "";
+      const p = document.createElement("p");
+      p.textContent = texto;
+      if (ehErro) {
+        p.className = "erro";
+      }
+      elemento.appendChild(p);
+    }
+
+    // 1) Busca todos os usuários e coloca no select
+    async function carregarUsuarios() {
+      try {
+        const resposta = await fetch(`${API}/users`);
+
+        if (!resposta.ok) {
+          throw new Error("Falha ao buscar usuários");
+        }
+
+        const usuarios = await resposta.json();
+
+        selectUsuario.innerHTML = "";
+
+        const opcaoPadrao = document.createElement("option");
+        opcaoPadrao.value = "";
+        opcaoPadrao.textContent = "Selecione um usuário";
+        selectUsuario.appendChild(opcaoPadrao);
+
+        for (const usuario of usuarios) {
+          const option = document.createElement("option");
+          option.value = usuario.id;
+          option.textContent = usuario.name;
+          selectUsuario.appendChild(option);
+        }
+      } catch (erro) {
+        selectUsuario.innerHTML = '<option value="">Erro ao carregar usuários</option>';
+        mostrarMensagem(listaPostagens, "Não foi possível carregar os usuários.", true);
+      }
+    }
+
+    // 2) Busca as postagens do usuário escolhido e lista os títulos
+    async function carregarPostagens(userId) {
+      mostrarMensagem(listaPostagens, "Carregando postagens...");
+
+      try {
+        const resposta = await fetch(`${API}/posts?userId=${userId}`);
+
+        if (!resposta.ok) {
+          throw new Error("Falha ao buscar postagens");
+        }
+
+        const postagens = await resposta.json();
+
+        // Se o usuário trocou a seleção enquanto carregava, ignora esta resposta
+        if (selectUsuario.value !== userId) {
+          return;
+        }
+
+        listaPostagens.innerHTML = "";
+
+        for (const postagem of postagens) {
+          const botao = document.createElement("button");
+          botao.type = "button";
+          botao.className = "titulo";
+          botao.textContent = postagem.title;
+          botao.addEventListener("click", () => abrirPostagem(postagem.id, botao));
+          listaPostagens.appendChild(botao);
+        }
+      } catch (erro) {
+        mostrarMensagem(listaPostagens, "Não foi possível carregar as postagens.", true);
+      }
+    }
+
+    // 3) Ao clicar num título: busca a postagem completa e os comentários
+    async function abrirPostagem(postId, botaoTitulo) {
+      const jaEstavaAberta = botaoTitulo.classList.contains("selecionado");
+
+      // Fecha a postagem que estiver aberta
+      const detalhesAbertos = listaPostagens.querySelector(".detalhes");
+      if (detalhesAbertos) {
+        detalhesAbertos.remove();
+      }
+      listaPostagens.querySelectorAll(".selecionado").forEach((el) => el.classList.remove("selecionado"));
+
+      // Clicar de novo no mesmo título só fecha os detalhes
+      if (jaEstavaAberta) {
+        return;
+      }
+
+      botaoTitulo.classList.add("selecionado");
+
+      const detalhes = document.createElement("div");
+      detalhes.className = "detalhes";
+      mostrarMensagem(detalhes, "Carregando postagem...");
+      botaoTitulo.after(detalhes); // 4) Exibe embaixo do título clicado
+
+      const minhaRequisicao = ++requisicaoAtual;
+
+      try {
+        // As duas buscas acontecem ao mesmo tempo
+        const [respostaPost, respostaComentarios] = await Promise.all([
+          fetch(`${API}/posts/${postId}`),
+          fetch(`${API}/posts/${postId}/comments`),
+        ]);
+
+        if (!respostaPost.ok || !respostaComentarios.ok) {
+          throw new Error("Falha ao buscar detalhes");
+        }
+
+        const postagem = await respostaPost.json();
+        const comentarios = await respostaComentarios.json();
+
+        if (minhaRequisicao !== requisicaoAtual) {
+          return;
+        }
+
+        exibirDetalhes(detalhes, postagem, comentarios);
+      } catch (erro) {
+        if (minhaRequisicao === requisicaoAtual) {
+          mostrarMensagem(detalhes, "Erro ao carregar a postagem.", true);
+        }
+      }
+    }
+
+    // 4) Monta o conteúdo da postagem e a lista de comentários
+    function exibirDetalhes(container, postagem, comentarios) {
+      container.innerHTML = "";
+
+      const titulo = document.createElement("h3");
+      titulo.textContent = postagem.title;
+
+      const corpo = document.createElement("p");
+      corpo.textContent = postagem.body;
+
+      const rotuloComentarios = document.createElement("p");
+      const strong = document.createElement("strong");
+      strong.textContent = "Comentários:";
+      rotuloComentarios.appendChild(strong);
+
+      const lista = document.createElement("ul");
+
+      for (const comentario of comentarios) {
+        const item = document.createElement("li");
+        const nome = document.createElement("strong");
+        nome.textContent = `${comentario.name}: `;
+        item.append(nome, comentario.body);
+        lista.appendChild(item);
+      }
+
+      container.append(titulo, corpo, rotuloComentarios, lista);
+    }
+
+    selectUsuario.addEventListener("change", () => {
+      const userId = selectUsuario.value;
+
+      if (!userId) {
+        listaPostagens.innerHTML = "";
+        return;
+      }
+
+      carregarPostagens(userId);
+    });
+
+    carregarUsuarios();
+  </script>
+</body>
+</html>
